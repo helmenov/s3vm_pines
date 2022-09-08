@@ -3,6 +3,9 @@ import numpy as np
 from matplotlib import colors
 from matplotlib import pyplot as plt
 import pandas as pd
+from importlib import resources
+
+recategorize_csv = resources.files('s3vm_pines')/'recategolize'/'recategorize17to10.csv'
 
 def make_traininigSet(Area=2,NumWanted=5,seed=0):
     """
@@ -29,7 +32,7 @@ def make_traininigSet(Area=2,NumWanted=5,seed=0):
     IP_conf = {
         "pca": 5,
         "include_background": True,
-        "recategorize_rule" : 'data/recategorize17to10.csv',
+        "recategorize_rule" : recategorize_csv,
         "exclude_WaterAbsorptionChannels" : True,
         "gt_gic" : True,
     }
@@ -101,7 +104,7 @@ def colored_map(target,cordinates):
     IP_conf = {
         "pca": 5,
         "include_background": True,
-        "recategorize_rule" : 'data/recategorize17to10.csv',
+        "recategorize_rule" : recategorize_csv,
         "exclude_WaterAbsorptionChannels" : True,
         "gt_gic" : True,
     }

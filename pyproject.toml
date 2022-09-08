@@ -3,7 +3,7 @@ name = "s3vm-pines"
 version = "0.1.0"
 description = ""
 authors = ["Kotaro SONODA <kotaro1976@gmail.com>"]
-readme = "README.md"
+readme = "README.qmd"
 packages = [{include = "s3vm_pines"}]
 
 [tool.poetry.dependencies]
