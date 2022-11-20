@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "s3vm-pines"
-version = "0.1.1"
+version = "0.1.2"
 description = ""
 authors = ["Kotaro SONODA <kotaro1976@gmail.com>"]
 readme = "README.md"
@@ -8,15 +8,13 @@ packages = [{include = "s3vm_pines"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
-
+indianpines = {git = "https://github.com/helmenov/indianpines.git"}
+SciencePlots = "^1.0.9"
 
 [tool.poetry.group.dev.dependencies]
 scipy = "^1.9.0"
-semisup-learn = {git = "https://github.com/tmadl/semisup-learn.git"}
-indianpines = {git = "https://github.com/helmenov/indianpines.git"}
 jupyter = "^1.0.0"
 notebook = "^6.4.12"
-SciencePlots = "^1.0.9"
 
 [build-system]
 requires = ["poetry-core"]

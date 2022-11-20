@@ -94,7 +94,7 @@ def make_traininigSet(Area=2,NumWanted=5,seed=0):
 
     return status, status_name
 
-def colored_map(target,cordinates):
+def colored_map(ax,target,cordinates):
     """targetの色分け地図を描画
 
     Args:
@@ -130,6 +130,4 @@ def colored_map(target,cordinates):
     df[id] = l_df[id]
     df = df.fillna('#ffffff')
 
-    fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
     ax.imshow(colors.to_rgba_array(df['hex-color'].values).reshape([145,145,4]))
