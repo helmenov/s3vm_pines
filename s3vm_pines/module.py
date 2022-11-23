@@ -4,97 +4,192 @@ from matplotlib import colors
 from matplotlib import pyplot as plt
 import pandas as pd
 from importlib import resources
+from numpy.random import default_rng
 
 recategorize_csv = resources.files('s3vm_pines')/'recategolize'/'recategorize17to10.csv'
 
-def make_traininigSet(Area=2,NumWanted=5,seed=0):
+def train_test_split(prop_train = 0.5, recategorize_rule=None, gt_gic=True):
     """
-    データセットに対する
-    - unlabeled(rest) = 0
-    - labeled(training) = 1
-    - test(test) = 2
-    - unused(background) = 3
-    のタグ付けリスト(status)とタグ名(status_name)を返す．
-    labeled(1)とtest(2)は隣接Area*Areaで同一カテゴリとなっている領域から作成される．
+    ラベル付きデータセットをtraining:test = p:1-pに分けて，
+    各データ番号に対する status番号 を返す．
+    0: background
+    1: test
+    2: training
 
-    * 基本的には一度作ってcsv保存とかしておけばいいのかも
-
-    Input:
-    - Area (int): labeledとtestに設定する同一カテゴリ連続隣接矩形領域の辺長ピクセル数
-    - NumWanted (int): labeledとtestそれぞれに欲しい連続領域の個数
-    - seed (int): 乱数シード
+    ただし，trainingデータは，隣接pixelで同一カテゴリとなっている領域から選ばれる．
 
     Output:
     - status (np.array(SampleSize,)): タグ番号リスト
-    - status_name (str List(4,)): タグ番号順に並べたタグ名の対応リスト
+    - status_name (str List(3,)): タグ番号順に並べたタグ名の対応リスト
     """
 
     IP_conf = {
         "pca": 5,
         "include_background": True,
-        "recategorize_rule" : recategorize_csv,
+        "recategorize_rule" : recategorize_rule,
         "exclude_WaterAbsorptionChannels" : True,
-        "gt_gic" : True,
+        "gt_gic" : gt_gic,
     }
     pines = IP.load(**IP_conf)
+    n_class = pines.target_names.shape[0]
 
-    # Area x Area　の同一カテゴリの領域をトレーニングエリアとする．
-    halfArea=Area//2
-    rng = np.random.default_rng(seed)
+    #lx = np.max(pines.cordinates[:,0])+1
+    #ly = np.max(pines.cordinates[:,1])+1
 
-    ly = np.max(pines.cordinates[:,0])+1
-    lx = np.max(pines.cordinates[:,1])+1
-    cnt_tra = np.zeros(10)
-    cnt_tes = np.zeros(10)
-    i_tra = []
-    i_tes = []
-    for y in range(halfArea,ly-halfArea):
-        for x in range(halfArea,lx-halfArea):
-            I = []
-            UI = []
-            LI = []
-            for dy in range(-halfArea,Area-halfArea):
-                for dx in range(-halfArea,Area-halfArea):
-                    I.append((y+dy)*lx+(x+dx))
-            t = pines.target[I[0]]
-            for dx in range(-halfArea-1,Area-halfArea-1):
-                UI.append(I[0]-Area+dx)
+    def xy2idx(x,y):
+        ly = np.max(pines.cordinates[:,1])+1
+        return y + x*ly
 
-            for dy in range(-halfArea,Area-halfArea):
-                LI.append(I[0]-1+(dy+halfArea)*lx)
+    claster_list = list()
+    for t in range(1,n_class):
+        claster = np.zeros_like(pines.target)
+        LookupTable = list()
+        label = 0
+        LookupTable.append(label)
+        for xi, yi in pines.cordinates[pines.target==t]:
+            c_Neighbors = list()
+            # UpperLeft
+            if xi-1 > 0 and yi-1 >0: c_Neighbors.append(claster[xy2idx(xi-1,yi-1)])
+            # Upper
+            if xi > 0 and yi-1 >0: c_Neighbors.append(claster[xy2idx(xi,yi-1)])
+            # Left
+            if xi-1 > 0 and yi > 0: c_Neighbors.append(claster[xy2idx(xi-1,yi)])
+            # UnderLeft
+            if xi-1 > 0 and yi+1 >0: c_Neighbors.append(claster[xy2idx(xi-1,yi+1)])
+            c_Neighbors = np.array(c_Neighbors)
+            #print(c_Neighbors)
+            if np.all(c_Neighbors == 0):
+                label += 1
+                LookupTable.append(label)
+                claster[xy2idx(xi,yi)] = label
+                #print(f"({xi},{yi}) is labeled {label} [A]")
+            else:
+                if len(c_Neighbors[c_Neighbors>0]) > 0:
+                    claster[xy2idx(xi,yi)] = min(c_Neighbors[c_Neighbors>0])
+                    #print(f"({xi},{yi}) is labeled {min(c_Neighbors[c_Neighbors>0])}[B]")
+                    #print(f"claster[{xy2idx(xi,yi)}] = {claster[xy2idx(xi,yi)]}")
+                    for c_other in c_Neighbors[c_Neighbors>claster[xy2idx(xi,yi)]]:
+                        LookupTable[c_other] = claster[xy2idx(xi,yi)]
+            #print("---")
 
-            if t != 0 and np.all(pines.target[I] == t):
-                if np.any(pines.target[UI] != t) and np.any(pines.target[LI] != t):
-                    if rng.binomial(1,0.5):
-                        if cnt_tra[t] < NumWanted:
-                            for i in I:
-                                i_tra.append([i,t])
-                            cnt_tra[t] = cnt_tra[t]+1
-                    else:
-                        if cnt_tes[t] < NumWanted:
-                            for i in I:
-                                i_tes.append([i,t])
-                            cnt_tes[t] = cnt_tes[t]+1
-    i_tra = np.array(i_tra)
-    i_tes = np.array(i_tes)
+        # LookupTableを降順に見て，使われなかったラベルを統合
+        L = len(LookupTable)
+        for i,j in enumerate(LookupTable[::-1]):
+            if j != L-i-1:
+                claster[claster==L-i-1] = j
 
+        # indexlistを作る
+        claster_list_t = list()
+        for c in range(1,max(claster)+1):
+            list_idx = sorted([idx for idx in range(len(claster)) if claster[idx]==c])
+            claster_list_t.append(list_idx)
+            #print(len(claster[claster == c]))
+        #print(claster_list_t)
+        claster_list.append(claster_list_t)
+        #print('='*10)
 
-    # unused(background) = 3, labeled(training) = 1,
-    # test(test) = 2, unlabeled(rest) = 0
-    status = np.zeros((lx*ly,))
-    for i,t in i_tra:
-        status[i] = 1
-    for i,t in i_tes:
-        status[i] = 2
-    for i,t in enumerate(pines.target):
-        if t == 0:
-            status[i] = 3
+    # claster_list[t] : targetのクラスター番号リスト
+    # claster_list[t][l] : targetのl番目のクラスターのインデクスリスト
 
-    status_name = ['unlabeled','labeled','test','background']
+    status = np.zeros_like(pines.target)
+    for t in range(1,n_class):
+        idx = (pines.target==t)
+        status[idx] = 1
+        n_labeled = pines.target[pines.target == t].shape[0]
+        #print(n_labeled)
+        n_train = int(np.ceil(prop_train * n_labeled))
+        claster_size = list()
+        for c in claster_list[t-1]:
+            claster_size.append(len(c))
+        ic = np.argsort(claster_size)[::-1]
+        nc = np.sort(claster_size)[::-1]
+        #print(f"__{nc}")
+        for c in ic:
+            claster_list[t-1].append(claster_list[t-1][c])
+        for c in ic:
+            del claster_list[t-1][0]
+        #print(f"{type(claster_list[t])}")
+        #print(f"{claster_list[t]}")
+        idx = [claster_list[t-1][l][i] for l in range(len(claster_list[t-1])) for i in range(len(claster_list[t-1][l]))]
+        #print(idx)
+        #print(len(idx))
+        print(f"{n_train}/{n_labeled}")
+        status[idx[:n_train]] = 2
+
+    status_name = ['background', 'test', 'training']
 
     return status, status_name
 
-def colored_map(ax,target,cordinates):
+def labeled_unlabeled_test_split(prop_train_l, status, features, target, cordinates=None, unlabeled_type = 'from_train', sd_threshold=0.5, seed_l=None, seed_u=None):
+    """
+    prop_train_l
+    - labeled data proportion to train data. (NOTE: proportion to annotated data is prop_train * prop_train_l)
+
+    unlabeled_type
+    - "from_train" :            selected from the group of status == 2 (training data)
+    - "from_spatial" : selected from remained annotated data after selecting labeled, by neighboring and close-spectrum.
+    - "from_other" :            selected from remained annotated data after selecting labeled, randomly
+
+    seed_l : start_idx which define to select labeled from train data
+
+    seed_u : shuffle seed for selecting unlabeled from annotated data
+
+    output l_u_t_status, l_u_t_status_name
+    - l_u_t_status_name = ['background', 'test', 'unlabeled', 'labeled']
+    - l_u_t_status : statuses for each instance in `l_u_t_status_name`
+    """
+    rg1 = default_rng(seed_l)
+    rg2 = default_rng(seed_u)
+
+    def xy2idx(x,y):
+        ly = np.max(cordinates[:,1])+1
+        return y + x*ly
+
+    labels = sorted(list(set(target)))
+    status = np.array(status)
+    l_u_t_status = np.zeros_like(status) # labeledの初期化．0は，background(non-annotated)を表す
+    for t in labels:
+        idx_train = list()
+        idx_test = list()
+        for i,ti in enumerate(target):
+            if ti == t:            # targetが t である．
+                if status[i] == 2: # 決められたtrainingに入っている
+                    idx_train.append(i)
+                elif status[i] == 1:
+                    idx_test.append(i)
+        l_u_t_status[idx_test] = 1            # targetが t で，statusがtest　を 1[test]に初期化
+        l_u_t_status[idx_train] = 2           # targetが t で，statusがtraining　を2[unlabeled]に初期化
+        n_train = len(idx_train)
+        n_labeled = int(np.ceil(prop_train_l * n_train))
+        n_unlabeled = n_train - n_labeled
+        st = int(np.floor(rg1.uniform(low=0, high=n_unlabeled)))
+        l_u_t_status[idx_train[st:st+n_labeled]] = 3 # 2[unlabeled]から継続して選んだものを3「labeled」とする．
+        if unlabeled_type != 'from_train':
+            # status = 1 「trainingデータからlabeledを抽出した残り」 を test に統合
+            l_u_t_status[l_u_t_status == 2] = 1
+            idx_test = np.where(l_u_t_status == 1)[0]
+            idx_test = rg2.permutation(idx_test)
+            if unlabeled_type == 'from_other':
+                l_u_t_status[idx_test[:n_unlabeled]] = 2
+            elif unlabeled_type == 'from_spatial':
+                for i in idx_test:
+                    xi, yi = cordinates[i]
+                    i_fourneighbor = [xy2idx(xi-1,yi), xy2idx(xi,yi-1), xy2idx(xi, yi+1), xy2idx(xi+1,yi)]
+                    i_eightneighbor = i_fourneighbor + [xy2idx(xi-1,yi-1), xy2idx(xi-1,yi+1), xy2idx(xi+1, yi-1), xy2idx(xi+1, yi+1)]
+                    i_neighbor = np.array(i_fourneighbor) ## <--- SET four or eight
+                    i_neighbor = i_neighbor[i_neighbor>0] # 実際に存在するインデクスに限定
+                    max_distance = -1e-7
+                    for j in i_neighbor:
+                        dist = features[i] @ features[j].T
+                        dist /= features[j] @ features[j].T
+                        if dist > max_distance: max_distance = dist
+                    if max_distance < sd_threshold:
+                        l_u_t_status[i] = 2
+
+    l_u_t_status_name = ['background', 'test', 'unlabeled', 'labeled']
+    return l_u_t_status, l_u_t_status_name
+
+def colored_map(ax,target,cordinates,recategorize_rule,gt_gic):
     """targetの色分け地図を描画
 
     Args:
@@ -104,9 +199,9 @@ def colored_map(ax,target,cordinates):
     IP_conf = {
         "pca": 5,
         "include_background": True,
-        "recategorize_rule" : recategorize_csv,
+        "recategorize_rule" : recategorize_rule,
         "exclude_WaterAbsorptionChannels" : True,
-        "gt_gic" : True,
+        "gt_gic" : gt_gic,
     }
     pines = IP.load(**IP_conf)
 
@@ -131,3 +226,6 @@ def colored_map(ax,target,cordinates):
     df = df.fillna('#ffffff')
 
     ax.imshow(colors.to_rgba_array(df['hex-color'].values).reshape([145,145,4]))
+
+    # legend 付けたいが，，，，ax.plotで作ってないので，どうするんだろ？
+    ax.legend(bbox_to_anchor=(1,1), loc='upper left')
