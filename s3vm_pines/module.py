@@ -238,6 +238,6 @@ def colored_map(ax,target,cordinates,recategorize_rule=recategorize17to10_csv,gt
     ax.imshow(colors.to_rgba_array(df['hex-color'].values).reshape([145,145,4]))
 
     for i,c in enumerate(pines.hex_names):
-        ax.scatter([],[],c=c,maker='s',label=pines.target_names[i])
+        ax.scatter([],[],c=c,marker='s',label=pines.target_names[i])
     # legend 付けたいが，，，，ax.plotで作ってないので，どうするんだろ？
     ax.legend(bbox_to_anchor=(1,1), loc='upper left')
