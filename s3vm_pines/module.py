@@ -6,9 +6,9 @@ import pandas as pd
 from importlib import resources
 from numpy.random import default_rng
 
-recategorize_csv = resources.files('s3vm_pines')/'recategolize'/'recategorize17to10.csv'
+recategorize17to10_csv = resources.files('s3vm_pines')/'recategolize'/'recategorize17to10.csv'
 
-def train_test_split(prop_train = 0.5, recategorize_rule=None, gt_gic=True):
+def train_test_split(prop_train = 0.5, recategorize_rule=recategorize17to10_csv, gt_gic=True):
     """
     ラベル付きデータセットをtraining:test = p:1-pに分けて，
     各データ番号に対する status番号 を返す．
@@ -120,7 +120,7 @@ def train_test_split(prop_train = 0.5, recategorize_rule=None, gt_gic=True):
 
     return status, status_name
 
-def labeled_unlabeled_test_split(prop_train_l, status, features, target, cordinates=None, unlabeled_type = 'from_train', sd_threshold=0.5, seed_l=None, seed_u=None):
+def labeled_unlabeled_test_split(prop_train_l, status, unlabeled_type = 'from_train', coh_threshold=0.5, seed_l=None, seed_u=None, recategorize_rule=recategorize17to10_csv, gt_gic=True):
     """
     prop_train_l
     - labeled data proportion to train data. (NOTE: proportion to annotated data is prop_train * prop_train_l)
@@ -138,6 +138,7 @@ def labeled_unlabeled_test_split(prop_train_l, status, features, target, cordina
     - l_u_t_status_name = ['background', 'test', 'unlabeled', 'labeled']
     - l_u_t_status : statuses for each instance in `l_u_t_status_name`
     """
+
     rg1 = default_rng(seed_l)
     rg2 = default_rng(seed_u)
 
@@ -145,13 +146,22 @@ def labeled_unlabeled_test_split(prop_train_l, status, features, target, cordina
         ly = np.max(cordinates[:,1])+1
         return y + x*ly
 
-    labels = sorted(list(set(target)))
+    IP_conf = {
+        "pca": 5,
+        "include_background": True,
+        "recategorize_rule" : recategorize_rule,
+        "exclude_WaterAbsorptionChannels" : True,
+        "gt_gic" : gt_gic,
+    }
+    pines = IP.load(**IP_conf)
+
+    labels = sorted(list(set(pines.target)))
     status = np.array(status)
     l_u_t_status = np.zeros_like(status) # labeledの初期化．0は，background(non-annotated)を表す
     for t in labels:
         idx_train = list()
         idx_test = list()
-        for i,ti in enumerate(target):
+        for i,ti in enumerate(pines.target):
             if ti == t:            # targetが t である．
                 if status[i] == 2: # 決められたtrainingに入っている
                     idx_train.append(i)
@@ -169,27 +179,27 @@ def labeled_unlabeled_test_split(prop_train_l, status, features, target, cordina
             l_u_t_status[l_u_t_status == 2] = 1
             idx_test = np.where(l_u_t_status == 1)[0]
             idx_test = rg2.permutation(idx_test)
-            if unlabeled_type == 'from_other':
+            if unlabeled_type == 'from_annot':
                 l_u_t_status[idx_test[:n_unlabeled]] = 2
-            elif unlabeled_type == 'from_spatial':
+            elif unlabeled_type == 'from_spatialneighbor':
                 for i in idx_test:
-                    xi, yi = cordinates[i]
+                    xi, yi = pines.cordinates[i]
                     i_fourneighbor = [xy2idx(xi-1,yi), xy2idx(xi,yi-1), xy2idx(xi, yi+1), xy2idx(xi+1,yi)]
                     i_eightneighbor = i_fourneighbor + [xy2idx(xi-1,yi-1), xy2idx(xi-1,yi+1), xy2idx(xi+1, yi-1), xy2idx(xi+1, yi+1)]
                     i_neighbor = np.array(i_fourneighbor) ## <--- SET four or eight
                     i_neighbor = i_neighbor[i_neighbor>0] # 実際に存在するインデクスに限定
-                    max_distance = -1e-7
+                    min_coherence = 1e+7
                     for j in i_neighbor:
-                        dist = features[i] @ features[j].T
-                        dist /= features[j] @ features[j].T
-                        if dist > max_distance: max_distance = dist
-                    if max_distance < sd_threshold:
+                        coh = pines.features[i] @ pines.features[j].T
+                        coh /= pines.features[j] @ pines.features[j].T
+                        if coh < min_coherence: min_coherence = coh
+                    if min_coherence > coh_threshold:
                         l_u_t_status[i] = 2
 
     l_u_t_status_name = ['background', 'test', 'unlabeled', 'labeled']
     return l_u_t_status, l_u_t_status_name
 
-def colored_map(ax,target,cordinates,recategorize_rule,gt_gic):
+def colored_map(ax,target,cordinates,recategorize_rule=recategorize17to10_csv,gt_gic=True):
     """targetの色分け地図を描画
 
     Args:
@@ -227,5 +237,7 @@ def colored_map(ax,target,cordinates,recategorize_rule,gt_gic):
 
     ax.imshow(colors.to_rgba_array(df['hex-color'].values).reshape([145,145,4]))
 
+    for i,c in enumerate(pines.hex_names):
+        ax.scatter([],[],c=c,maker='s',label=pines.target_names[i])
     # legend 付けたいが，，，，ax.plotで作ってないので，どうするんだろ？
     ax.legend(bbox_to_anchor=(1,1), loc='upper left')

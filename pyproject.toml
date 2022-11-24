@@ -1,10 +1,15 @@
 [tool.poetry]
 name = "s3vm-pines"
-version = "0.1.3"
-description = ""
+version = "0.1.4"
+description = "A study on Multiclass S3VM for IndianPines"
 authors = ["Kotaro SONODA <kotaro1976@gmail.com>"]
+maintainers = ["Kotaro SONODA <kotaro1976@gmail.com>"]
+repository = 'https://github.com/helmenov/s3vm_pines'
+keywords = ['S3VM', 'IndianPines']
+license = "MIT"
 readme = "README.md"
 packages = [{include = "s3vm_pines"}]
+include = ["exp/*.ipynb"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
