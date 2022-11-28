@@ -253,6 +253,7 @@ def colored_map(
     cordinates,
     recategorize_rule=recategorize17to10_csv,
     gt_gic=True,
+    with_legend=True
 ):
     """targetの色分け地図を描画
 
@@ -289,14 +290,15 @@ def colored_map(
     l_df = pd.merge(mapcordinates_df, l_df, on=["#x", "#y"], how="left")
 
     id = df["hex-color"].isna()
-    df[id] = l_df[id]
+    df[id] = l_df[id] # 主に描画したい対象以外をl_df(whole annotated)で埋める
     df = df.fillna("#ffffff")
 
     ax.imshow(
         colors.to_rgba_array(df["hex-color"].values).reshape([145, 145, 4])
     )
 
-    for i, c in enumerate(pines.hex_names):
-        ax.scatter([], [], c=c, marker="s", label=pines.target_names[i])
-    # legend 付けたいが，，，，ax.plotで作ってないので，どうするんだろ？
-    ax.legend(bbox_to_anchor=(1, 1), loc="upper left")
+    if with_legend is True:
+        for i, c in enumerate(pines.hex_names):
+            ax.scatter([], [], c=c, marker="s", label=pines.target_names[i])
+        # legend 付けたいが，，，，ax.plotで作ってないので，どうするんだろ？
+        ax.legend(bbox_to_anchor=(1, 1), loc="upper left")

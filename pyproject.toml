@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "s3vm-pines"
-version = "0.1.6"
+version = "0.1.7"
 description = "A study on Multiclass S3VM for IndianPines"
 authors = ["Kotaro SONODA <kotaro1976@gmail.com>"]
 maintainers = ["Kotaro SONODA <kotaro1976@gmail.com>"]
@@ -14,13 +14,16 @@ include = ["exp/*.html", "exp/*_files", "exp/*.ipynb"]
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"
 SciencePlots = "^1.0.9"
+pandas = "^1.5.2"
+matplotlib = "^3.6.2"
+numpy = "^1.23.5"
+indianpines = {git = "https://github.com/helmenov/indianpines.git"}
+qns3vm = {git = "https://github.com/helmenov/qns3vm.git"}
 
 [tool.poetry.group.dev.dependencies]
 scipy = "^1.9.0"
 jupyter = "^1.0.0"
 notebook = "^6.4.12"
-indianpines = {git = "https://github.com/helmenov/indianpines.git"}
-qns3vm = {git = "https://github.com/helmenov/qns3vm.git"}
 
 [build-system]
 requires = ["poetry-core"]
