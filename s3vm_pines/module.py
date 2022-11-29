@@ -11,12 +11,217 @@ recategorize17to10_csv = (
     resources.files("s3vm_pines") / "recategolize" / "recategorize17to10.csv"
 )
 
+def xy2idx(x_cord,y_cord):
+    """_summary_
+
+    Args:
+        x_cord, y_cord: int. x-axises and y-axises. [[0,0]] means Left-Upper side cordinate.
+    """
+
+    IP_conf = {
+        "include_background": True,
+    }
+    _pines = IP.load(**IP_conf)
+
+    Ly = np.max(_pines.cordinates[:,0])+1
+    Lx = np.max(_pines.cordinates[:,1])+1
+
+    idx = np.where(_pines.cordinates == np.array([y_cord, x_cord]))[0]
+
+    return idx
+
+def train_test_split2(recategorize_rule=recategorize17to10_csv, gt_gic=True):
+    """split whole data to 'train' and 'test'
+    すべての座標上のデータを千鳥格子状に（およそ）等分割する．
+
+    Returns:
+        train_test_status: status labels NDArray
+        train_test_status_name: ["background","test","training"]
+    """
+
+    P_conf = {
+        "include_background": True,
+        "recategorize_rule" : recategorize_rule,
+        "gt_gic": gt_gic,
+    }
+    _pines = IP.load(**IP_conf)
+
+    Ly = np.amax(_pines.cordinates[:,0])+1
+    Lx = np.amax(_pines.cordinates[:,1])+1
+
+    dx, dy = 4, 4 # 分割数
+
+    Sp = 1
+    while (Lx + Sp)%dx != 0 or (Ly + Sp)%dy != 0:
+        Sp += 1
+
+    lx, ly = int((Lx + Sp)//dx - Sp), int((Ly + Sp)//dy - Sp)
+
+    train_test_status = np.zeros_like(_pines.target)
+    y = np.array([range(idy*(ly+Sp-1),idy*(ly+Sp-1)+ly) for idy in range(0,dy,2)])
+    x = np.array([range(idx*(lx+Sp-1),idx*(lx+Sp-1)+lx) for idx in range(0,dx,2)])
+    train_test_status[_pines.cordinates[:,0] in y and _pines.cordinates[:,1] in x and _pines.target > 0] = 2
+    y = np.array([range(idy*(ly+Sp-1),idy*(ly+Sp-1)+ly) for idy in range(1,dy,2)])
+    x = np.array([range(idx*(lx+Sp-1),idx*(lx+Sp-1)+lx) for idx in range(1,dx,2)])
+    train_test_status[_pines.cordinates[:,0] in y and _pines.cordinates[:,1] in x and _pines.target > 0] = 1
+
+    train_test_status_name = ["background","test","training"]
+
+    return train_test_status, train_test_status_name
+
+def labeled_unlabeled_sample(p_labeled, p_unlabeled, train_test_status, recategorize_rule=recategorize17to10_csv, gt_gic=True, unlabeled_neighbor_labeled=False, seed_labeled=None, seed_unlabeled=None):
+    """sample labeled and unlabeled data from train data in the each proportion.
+
+    Args:
+        p_labeled (float): 0 < p_labeled <= 0.5, proportion of the number of labeled with respect to the number of train data.
+        p_unlabeled (float): 0 < p_unlabeled <= 0.5, proportion of the number of unlabeled with respect to the number of train data.
+        train_test_status (NDArray): referenced 'train_test_status' labels which 'train_test_split' method yields.
+        recategorize_rule: Defaults to recategorize17to10_csv
+        gt_gic: Defaults to True
+        unlabeled_neighbor_labeled (bool): Trueの場合，ラベルなしデータを，空間上でラベル付きデータに隣りあっているデータ群から採集. Falseの場合にはランダムに採集．Defaults to False.
+        seed_labeled (int, optional): seed for random heading of sampling labeled. Defaults to None.
+        seed_unlabeled (int, optional): seed for random sampling unlabeled. Defaults to None.
+    """
+    n_whole = train_test_status.shape[0]
+    n_train = train_test_status[train_test_status==2].shape[0]
+    n_labeled = p_labeled * n_train
+    n_unlabeled = p_unlabeled * n_train
+    assert n_labeled + n_unlabeled < n_train
+
+    rg_l = default_rng(seed_labeled)
+    rg_u = default_rng(seed_unlabeled)
+
+
+    P_conf = {
+        "include_background": True,
+        "recategorize_rule" : recategorize_rule,
+        "gt_gic": gt_gic,
+    }
+    _pines = IP.load(**IP_conf)
+
+    n_class = _pines.target_names.shape[0]
+    claster_list = list()
+    for t in range(1, n_class):
+        labeled_claster = np.zeros_like(_pines.target)
+        LookupTable = list()
+        label = 0
+        LookupTable.append(label)
+        for yi, xi in _pines.cordinates[_pines.target == t and train_test_status == 2]:
+            c_Neighbors = list()
+            # UpperLeft
+            if xi - 1 > 0 and yi - 1 > 0:
+                c_Neighbors.append(labeled_claster[xy2idx(xi - 1, yi - 1)])
+            # Upper
+            if xi > 0 and yi - 1 > 0:
+                c_Neighbors.append(labeled_claster[xy2idx(xi, yi - 1)])
+            # Left
+            if xi - 1 > 0 and yi > 0:
+                c_Neighbors.append(labeled_claster[xy2idx(xi - 1, yi)])
+            # UnderLeft
+            if xi - 1 > 0 and yi + 1 > 0:
+                c_Neighbors.append(labeled_claster[xy2idx(xi - 1, yi + 1)])
+            c_Neighbors = np.array(c_Neighbors)
+            # print(c_Neighbors)
+            if np.all(c_Neighbors == 0):
+                label += 1
+                LookupTable.append(label)
+                labeled_claster[xy2idx(xi, yi)] = label
+                # print(f"({xi},{yi}) is labeled {label} [A]")
+            else:
+                if len(c_Neighbors[c_Neighbors > 0]) > 0:
+                    labeled_claster[xy2idx(xi, yi)] = min(c_Neighbors[c_Neighbors > 0])
+                    # print(f"({xi},{yi}) is labeled {min(c_Neighbors[c_Neighbors>0])}[B]")
+                    # print(f"claster[{xy2idx(xi,yi)}] = {claster[xy2idx(xi,yi)]}")
+                    for c_other in c_Neighbors[
+                        c_Neighbors > labeled_claster[xy2idx(xi, yi)]
+                    ]:
+                        LookupTable[c_other] = labeled_claster[xy2idx(xi, yi)]
+            # print("---")
+
+        # LookupTableを降順に見て，使われなかったラベルを統合
+        L = len(LookupTable)
+        for i, j in enumerate(LookupTable[::-1]):
+            if j != L - i - 1:
+                labeled_claster[labeled_claster == L - i - 1] = j
+
+        # indexlistを作る
+        claster_list_t = list()
+        for c in range(1, max(labeled_claster) + 1):
+            list_idx = sorted(
+                [idx for idx in range(len(labeled_claster)) if labeled_claster[idx] == c]
+            )
+            claster_list_t.append(list_idx)
+            # print(len(claster[claster == c]))
+        # print(claster_list_t)
+        claster_list.append(claster_list_t)
+        # print('='*10)
+
+    # claster_list[t] : targetのクラスター番号リスト
+    # claster_list[t][l] : targetのl番目のクラスターのインデクスリスト
+
+    status = np.zeros_like(_pines.target)
+    for t in range(1, n_class):
+        idx = _pines.target == t
+        status[idx] = 1
+        idx = _pines.target == t and train_test_status == 2
+        status[idx] = 2
+        n_train_t = _pines.target[_pines.target == t and train_test_status == 2].shape[0]
+        # print(n_labeled)
+        n_labeled_t = int(np.ceil(p_labeled * n_train_t))
+        n_unlabeled_t = int(np.ceil(p_unlabeled * n_train_t))
+        claster_size = list()
+        for c in claster_list[t - 1]:
+            claster_size.append(len(c))
+        ic = np.argsort(claster_size)[::-1]
+        nc = np.sort(claster_size)[::-1]
+        # print(f"__{nc}")
+        for c in ic:
+            claster_list[t - 1].append(claster_list[t - 1][c])
+        for c in ic:
+            del claster_list[t - 1][0]
+        # print(f"{type(claster_list[t])}")
+        # print(f"{claster_list[t]}")
+        idx = [
+            claster_list[t - 1][l][i]
+            for l in range(len(claster_list[t - 1]))
+            for i in range(len(claster_list[t - 1][l]))
+        ]
+        # print(idx)
+        # print(len(idx))
+
+        st = int(np.floor(rg_l.uniform(low=0, high=n_unlabeled_t)))
+        status[idx[st:st+n_labeled_t]] = 3
+
+        idx_train_rest = np.where(status == 2)[0]
+        idx_train_rest = rg_u.permutation(idx_train_rest)
+        if unlabeled_neighbor_labeled == True:
+            n_train_rest = len(idx_train_rest)
+            cnt_u = 0
+            for i in idx_train_rest:
+                iUL = xy2idx(_pines.cordinate[i,1]-1, _pines.cordinate[i,0]-1)
+                iUC = xy2idx(_pines.cordinate[i,1],   _pines.cordinate[i,0]-1)
+                iUR = xy2idx(_pines.cordinate[i,1]+1, _pines,cordinate[i,0]-1)
+                iCL = xy2idx(_pines.cordinate[i,1]-1, _pines.cordinate[i,0])
+                iCR = xy2idx(_pines.cordinate[i,1]+1, _pines.cordinate[i,0])
+                iDL = xy2idx(_pines.cordinate[i,1]-1, _pines.cordinate[i,0]+1)
+                iDC = xy2idx(_pines.cordinate[i,1],   _pines.cordinate[i,0]+1)
+                iDR = xy2idx(_pines.cordinate[i,1]+1, _pines.cordinate[i,0]+1)
+                if status[iUL] == 3 or status[iUC] == 3 or status[iUR] == 3 or status[iCL] == 3 or status[iCR] == 3 or status[iDL] == 3 or status[iDC] == 3 or status[iDR] == 3:
+                    status[i] = 4
+                    cnt_u += 1
+                    if cnt_u < n_unlabeled_t: continue
+        else:
+            status[idx_train_rest[:n_unlabeled_t]] = 4
+
+    status_name = ["background", "test", "training_rest", "labeled", "unlabeled"]
+
+    return status, status_name
 
 def train_test_split(
     prop_train=0.5, recategorize_rule=recategorize17to10_csv, gt_gic=True
 ):
     """
-    ラベル付きデータセットをtraining:test = p:1-pに分けて，
+    アノテーションデータを train:test = p:1-p に分割する．
     各データ番号に対する status番号 を返す．
     0: background
     1: test
