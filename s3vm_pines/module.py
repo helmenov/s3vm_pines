@@ -92,7 +92,7 @@ def labeled_unlabeled_sample(p_labeled, p_unlabeled, train_test_status, recatego
     rg_u = default_rng(seed_unlabeled)
 
 
-    P_conf = {
+    IP_conf = {
         "include_background": True,
         "recategorize_rule" : recategorize_rule,
         "gt_gic": gt_gic,
