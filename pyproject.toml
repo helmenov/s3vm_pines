@@ -9,7 +9,7 @@ keywords = ['S3VM', 'IndianPines']
 license = "MIT"
 readme = "README.md"
 packages = [{include = "s3vm_pines"}]
-include = ["mybook/_book"]
+include = ["mybook/_book", "mybook/*.ipynb"]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.11"

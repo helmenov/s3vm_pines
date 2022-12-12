@@ -7,7 +7,7 @@ This Package provides some tools for a study.
 - `labeled_unlabeled_test_split()` : function to split annotated data into labeled, unlabeled, and test (unlabeled proportion with respect to the numbers of train data is defined `prop_train_l`)
 - `colored_map()` : plot land cover image colored by category
 
-And, experiment examples under [`exp` directory](exp).
+And, experiment examples under [`mybook` directory](mybook).
 
 ## Using
 
