@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3vm-pines
-Version: 0.1.9
+Version: 0.1.10
 Summary: A study on Multiclass S3VM for IndianPines
 Home-page: https://github.com/helmenov/s3vm_pines
 License: MIT
@@ -39,7 +39,7 @@ And, experiment examples under [`exp` directory](exp).
 
 and, in your python code,
 
-`from s3vm_pines import module`
+`import s3vm_pines`
 
 ## functions
 
@@ -49,7 +49,7 @@ Note: train dataset is sampled aggromeratively in the map space. it is NOT rando
 
 Args:
 
-- `prop_train` : (float) train data proportion with respect to the number of annotated data. default is 0.5, it means train:test = 1:1
+- `p_train` : (float) train data proportion with respect to the number of annotated data (train:test = p_train:(1-p_train)). default is 0.5, it means train:test = 1:1
 - `recategorize_rule` : (str) csv file name which defines recategorize rule. default is `recategorize17to10_csv`. if `None` then it means "not to recategorize": using original 17 categories.
 - `gt_gic` : (bool) read [IndianPines package](https://www.github.com/helmenov/IndianPines). default is True
 
@@ -58,6 +58,30 @@ Outputs: `status, status_name` (tuple)
 - `status` : (list[int]) status_number's list for each data ID
 - `status_names` : (list[str]) status_label's for each status_number.
     it must be `['backgound', 'test', 'train']`
+
+It clustering by each target labels, firstly.
+Then sampled train data from the broadest cluster in zigzag sampling.
+
+
+### `s3vm_pines.module.labeled_unlabeled_sample()`
+
+sample labeled and unlabeled data from train data in the each proportion.
+labeled data sampled in coordinately continuous, and unlabeled data sampled in random.
+
+Args:
+
+- `p_labeled` : (float): 0 < p_labeled <= 0.5, proportion of the # of labeled with respect to the # of training data.
+- `p_unlabeled` : (flaot): 0 < p_unlabeled <= 0.5, proportion of the # of unlabeled with respect to the # of training data. 
+- `train_test_status` : (NDArray): referenced `train_test_status` labels which `train_test_split` method yields.
+- `unlabeled_neighbor_labeled`: (bool): If true, sample unlabeled data from neighboring labeld data. Else, sample them randomly (default: False)
+- `seed_labeled` : (float) random seed for sampling start point
+- `seed_unlabeled` : (float) random seed for random sampling
+
+Outputs: `status, status_names` (tuple)
+
+- `status` : (list[int]) status_number's list for each data ID
+- `status_names` : (list[str]) status labels for each status_number. it must be `["background", "test", "traininig_rest", "labeled", "unlabeled"]`.
+
 
 ### `s3vm_pines.module.labeled_unlabeled_test_split()`
 
