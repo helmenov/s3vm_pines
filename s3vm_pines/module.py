@@ -280,7 +280,7 @@ def labeled_unlabeled_sample(
     n_unlabeled = p_unlabeled*n_labeled
     if n_unlabeled > n_train-n_labeled:
         n_unlabeled = n_train-n_labeled
-        print(f'p_unlabeled: {p_unlabeled} -> {n_unlabeled/n_labeled:%3.2}')
+        print(f'p_unlabeled: {p_unlabeled} -> {n_unlabeled/n_labeled}')
         p_unlabeled = n_unlabeled/n_labeled
     logging.info(f"{n_whole=},{n_train=},{n_labeled=},{n_unlabeled=}")
     assert n_labeled + n_unlabeled <= n_train
