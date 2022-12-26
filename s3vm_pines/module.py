@@ -63,7 +63,7 @@ def train_test_split(
     p_train=0.5,
     recategorize_rule=recategorize17to10_csv,
     gt_gic=True,
-    seed_train=None,
+    seed_train=0,
 ):
     """split whole data to 'train' and 'test'
     すべての座標上のデータをカテゴリごとに領域分割し，
@@ -259,14 +259,14 @@ def labeled_unlabeled_sample(
     recategorize_rule=recategorize17to10_csv,
     gt_gic=True,
     unlabeled_neighbor_labeled=False,
-    seed_labeled=None,
-    seed_unlabeled=None,
+    seed_labeled=0,
+    seed_unlabeled=0,
 ):
     """sample labeled and unlabeled data from train data in the each proportion.
 
     Args:
-        p_labeled (float): 0 < p_labeled <= 0.5, proportion of the number of labeled with respect to the number of train data.
-        p_unlabeled (float): 0 < p_unlabeled <= 0.5, proportion of the number of unlabeled with respect to the number of train data.
+        p_labeled (float): 0 < p_labeled <= 1, proportion of the number of labeled with respect to the number of train data.
+        p_unlabeled (float): 0 < p_labeled*p_unlabeled <= 1, proportion of the number of unlabeled with respect to the number of train data.
         train_test_status (NDArray): referenced 'train_test_status' labels which 'train_test_split' method yields.
         recategorize_rule: Defaults to recategorize17to10_csv
         gt_gic: Defaults to True
@@ -277,11 +277,15 @@ def labeled_unlabeled_sample(
     n_whole = train_test_status.shape[0]
     n_train = train_test_status[train_test_status == 2].shape[0]
     n_labeled = int(np.ceil(p_labeled * n_train))
-    n_unlabeled = int(np.ceil(p_unlabeled * n_train))
+    n_unlabeled = p_unlabeled*n_labeled
+    if n_unlabeled > n_train-n_labeled:
+        n_unlabeled = n_train-n_labeled
+        print(f'p_unlabeled: {p_unlabeled} -> {n_unlabeled/n_labeld:%3.2}')
+        p_unlabeled = n_unlabeled/n_labeled
     logging.info(f"{n_whole=},{n_train=},{n_labeled=},{n_unlabeled=}")
     assert n_labeled + n_unlabeled <= n_train
 
-    if rg_l > 0:
+    if seed_labeled > 0:
         rg_l = default_rng(seed_labeled)
     rg_u = default_rng(seed_unlabeled)
 
@@ -408,13 +412,13 @@ def labeled_unlabeled_sample(
     ####
     logging.info("Now sampling labeled and unlabeled data")
     ####
-    status = np.zeros_like(_pines.target)
+    status = np.zeros_like(_pines.target) # background
     for t in range(1, n_class):
         logging.info(f"\t{t}/{n_class}:{_pines.target_names[t]}")
         idx = _pines.target == t
-        status[idx] = 1
+        status[idx] = 1 # relabel background -> test
         idx = (_pines.target == t) & (train_test_status == 2)
-        status[idx] = 2
+        status[idx] = 2 # relabel test -> training_rest
         n_train_t = _pines.target[idx].shape[0]
         # print(n_labeled)
         n_labeled_t = int(np.ceil(p_labeled * n_train_t))
@@ -440,87 +444,89 @@ def labeled_unlabeled_sample(
         # print(len(idx))
         # idx = zigzag_sortindices(idx, zigzag)
 
-        if rg_l > 0:
+        if seed_labeled > 0:
             st = int(
                 np.floor(rg_l.uniform(low=0, high=n_train_t - n_unlabeled_t))
             )
-        elif rg_l == 0:
+        elif seed_labeled == 0:
             st = 0
         else:
             st = len(idx) - n_labeled_t
-        status[idx[st : st + n_labeled_t]] = 3
+        status[idx[st : st + n_labeled_t]] = 3 # (3)labeled
 
-        idx_train_rest = np.where((status == 2) & (_pines.target == t))[0]
-        idx_train_rest = rg_u.permutation(idx_train_rest)
-        if unlabeled_neighbor_labeled == True:
-            n_train_rest = len(idx_train_rest)
-            cnt_u = 0
-            for i in idx_train_rest:
-                iUL = xy2idx(
-                    _pines.coordinate[i, 0] - 1,
-                    _pines.coordinate[i, 1] - 1,
-                    Lx,
-                    Ly,
-                )
-                iUC = xy2idx(
-                    _pines.coordinate[i, 0],
-                    _pines.coordinate[i, 1] - 1,
-                    Lx,
-                    Ly,
-                )
-                iUR = xy2idx(
-                    _pines.coordinate[i, 0] + 1,
-                    _pines,
-                    coordinate[i, 1] - 1,
-                    Lx,
-                    Ly,
-                )
-                iCL = xy2idx(
-                    _pines.coordinate[i, 0] - 1,
-                    _pines.coordinate[i, 1],
-                    Lx,
-                    Ly,
-                )
-                iCR = xy2idx(
-                    _pines.coordinate[i, 0] + 1,
-                    _pines.coordinate[i, 1],
-                    Lx,
-                    Ly,
-                )
-                iDL = xy2idx(
-                    _pines.coordinate[i, 0] - 1,
-                    _pines.coordinate[i, 1] + 1,
-                    Lx,
-                    Ly,
-                )
-                iDC = xy2idx(
-                    _pines.coordinate[i, 0],
-                    _pines.coordinate[i, 1] + 1,
-                    Lx,
-                    Ly,
-                )
-                iDR = xy2idx(
-                    _pines.coordinate[i, 0] + 1,
-                    _pines.coordinate[i, 1] + 1,
-                    Lx,
-                    Ly,
-                )
-                if (
-                    status[iUL] == 3
-                    or status[iUC] == 3
-                    or status[iUR] == 3
-                    or status[iCL] == 3
-                    or status[iCR] == 3
-                    or status[iDL] == 3
-                    or status[iDC] == 3
-                    or status[iDR] == 3
-                ):
-                    status[i] = 4
-                    cnt_u += 1
-                    if cnt_u < n_unlabeled_t:
-                        continue
-        else:
-            status[idx_train_rest[:n_unlabeled_t]] = 4
+    idx_train_rest = np.where((status == 2))[0]
+    idx_train_rest = rg_u.permutation(idx_train_rest)
+    n_train_rest = len(idx_train_rest)
+    n_labeled = len(status[status==3])
+    n_unlabeled = min(int(np.ceil(n_labeled*p_unlabeled)), len(idx_train_rest))
+    if unlabeled_neighbor_labeled == True:
+        cnt_u = 0
+        for i in idx_train_rest:
+            iUL = xy2idx(
+                _pines.coordinate[i, 0] - 1,
+                _pines.coordinate[i, 1] - 1,
+                Lx,
+                Ly,
+            )
+            iUC = xy2idx(
+                _pines.coordinate[i, 0],
+                _pines.coordinate[i, 1] - 1,
+                Lx,
+                Ly,
+            )
+            iUR = xy2idx(
+                _pines.coordinate[i, 0] + 1,
+                _pines,
+                coordinate[i, 1] - 1,
+                Lx,
+                Ly,
+            )
+            iCL = xy2idx(
+                _pines.coordinate[i, 0] - 1,
+                _pines.coordinate[i, 1],
+                Lx,
+                Ly,
+            )
+            iCR = xy2idx(
+                _pines.coordinate[i, 0] + 1,
+                _pines.coordinate[i, 1],
+                Lx,
+                Ly,
+            )
+            iDL = xy2idx(
+                _pines.coordinate[i, 0] - 1,
+                _pines.coordinate[i, 1] + 1,
+                Lx,
+                Ly,
+            )
+            iDC = xy2idx(
+                _pines.coordinate[i, 0],
+                _pines.coordinate[i, 1] + 1,
+                Lx,
+                Ly,
+            )
+            iDR = xy2idx(
+                _pines.coordinate[i, 0] + 1,
+                _pines.coordinate[i, 1] + 1,
+                Lx,
+                Ly,
+            )
+            if (
+                status[iUL] == 3
+                or status[iUC] == 3
+                or status[iUR] == 3
+                or status[iCL] == 3
+                or status[iCR] == 3
+                or status[iDL] == 3
+                or status[iDC] == 3
+                or status[iDR] == 3
+            ):
+                status[i] = 4 # (4)unlabeled
+                cnt_u += 1
+                if cnt_u < n_unlabeled:
+                    continue
+    else:
+        status[idx_train_rest[:n_unlabeled]] = 4
 
     status_name = [
         "background",
@@ -773,7 +779,7 @@ def colored_map(
     coordinates,
     recategorize_rule=recategorize17to10_csv,
     gt_gic=True,
-    with_legend=True,
+    with_legend=True
 ):
     """targetの色分け地図を描画
 
