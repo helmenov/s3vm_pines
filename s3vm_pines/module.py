@@ -46,23 +46,29 @@ def hilbert_index(lx: int, ly: int, morton: bool=False):
     def p_hilbert_index(p, morton):
         if p == 1:
             if morton == False:
-                coord = [[1,0],[0,0],[0,1],[1,1]]
+                coord = [[0,0],[0,1],[1,1],[1,0]]
             else:
-                coord = [[1,0],[0,0],[1,1],[0,1]]
+                coord = [[0,0],[0,1],[1,0],[1,1]]
             return np.array(coord, dtype=int)
         else:
-            bias = 2 * p_hilbert_index(p=p-1, morton=morton)
-            for i, b in enumerate(bias):
-                c = p_hilbert_index(p=1,morton=morton) + np.tile(b,(4,1))
+            bias = 2 * p_hilbert_index(p=1, morton=morton)
+            tiled = list()
+            for b in bias:
+                c = p_hilbert_index(p=p-1,morton=morton)
+                n_row = c.shape[0]
+                c += np.tile(b,(n_row,1))
+                tiled.append(c)
+            tiled = np.array(tiled)
+            for i, t in enumerate(tiled):
                 if morton == False:
                     if i == 0:
-                        c[1], c[3] = c[3],c[1]
-                    elif i == 2:
-                        c[0], c[2] = c[2],c[0]
-                if i==0:
-                    coord = c
+                        t[1], t[3] = t[3].copy(),t[1].copy()
+                    elif i == 3:
+                        t[0], t[2] = t[2].copy(),t[0].copy()
+                if i == 0:
+                    coord = np.array(t)
                 else:
-                    coord = np.r_[coord,c]
+                    coord = np.r_[coord,t]
             return coord
     coord = p_hilbert_index(p=p,morton=morton)
     hilbert_indices: list[int] = list()
@@ -159,7 +165,7 @@ def train_test_split(
     ####
     print(f"Now clustering for each target category")
     ####
-    scanner = hilbert_index(Lx, Ly, morton=True)
+    scanner = hilbert_index(Lx, Ly)
     for t in range(1, n_class):
         ####
         print(f"\t{t}/{n_class}: {_pines.target_names[t]}", end="")
@@ -374,7 +380,7 @@ def labeled_unlabeled_sample(
     ####
     logging.info(f"Now clustering for each target category")
     ####
-    scanner = hilbert_index(Lx, Ly, morton=True)
+    scanner = hilbert_index(Lx, Ly)
     for t in range(1, n_class):
         ####
         logging.info(f"\t{t}/{n_class}: {_pines.target_names[t]}")
