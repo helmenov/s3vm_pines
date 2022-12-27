@@ -31,7 +31,7 @@ def xy2idx(x_coord: int, y_coord: int, Lx: int, Ly: int) -> int:
     return idx
 
 
-def hilbert_index(lx: int, ly: int, morton: bool=False):
+def hilbert_index(lx: int, ly: int, morton=False):
     """
     generate Hilbert scan ordered indices
 
@@ -42,6 +42,7 @@ def hilbert_index(lx: int, ly: int, morton: bool=False):
         indices: NDArray (2^p*2^p, 1). Hilbert indices
     """
     p = int(np.ceil(np.log2(np.max([lx,ly]))))
+    axis = 1 if ly < lx else 0
 
     def p_hilbert_index(p, morton):
         if p == 1:
@@ -51,7 +52,8 @@ def hilbert_index(lx: int, ly: int, morton: bool=False):
                 coord = [[0,0],[0,1],[1,0],[1,1]]
             return np.array(coord, dtype=int)
         else:
-            bias = 2 * p_hilbert_index(p=1, morton=morton)
+            bias = 2**(p-1) * p_hilbert_index(p=1, morton=morton)
+            #print(bias)
             tiled = list()
             for b in bias:
                 c = p_hilbert_index(p=p-1,morton=morton)
@@ -59,20 +61,31 @@ def hilbert_index(lx: int, ly: int, morton: bool=False):
                 c += np.tile(b,(n_row,1))
                 tiled.append(c)
             tiled = np.array(tiled)
+            print(f'[{p}]{tiled=}')
             for i, t in enumerate(tiled):
                 if morton == False:
                     if i == 0:
-                        t[1], t[3] = t[3].copy(),t[1].copy()
+                        print(f'[{i}]{t=}')
+                        t[:,0], t[:,1] = t[:,1].copy(), t[:,0].copy()
+                        print(f'[{i}]{t=}')
                     elif i == 3:
-                        t[0], t[2] = t[2].copy(),t[0].copy()
+                        print(f'[{i}]{t=}')
+                        t -= [[2**(p-1),2**(p-1)-1]]
+                        t[:,0], t[:,1] = -t[:,1].copy(), -t[:,0].copy()
+                        t += [[2**(p-1),2**(p-1)-1]]
+                        print(f'[{i}]{t=}')
                 if i == 0:
-                    coord = np.array(t)
+                    coord = np.array([t])
                 else:
-                    coord = np.r_[coord,t]
+                    coord = np.r_[coord,[t]]
+            coord = coord.reshape(-1,2)
+            print(f'[{p}]{coord=}')
             return coord
     coord = p_hilbert_index(p=p,morton=morton)
+    if axis == 1:
+        coord[:,0], coord[:,1] = coord[:,1].copy(), coord[:,0].copy()
     hilbert_indices: list[int] = list()
-    for r,c in coord:
+    for c,r in coord:
         if r<ly and c<lx:
             hilbert_indices.append(int(r*lx+c))
     return np.array(hilbert_indices, dtype=int)
