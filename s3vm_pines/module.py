@@ -53,7 +53,6 @@ def hilbert_index(lx: int, ly: int, morton=False):
             return np.array(coord, dtype=int)
         else:
             bias = 2**(p-1) * p_hilbert_index(p=1, morton=morton)
-            #print(bias)
             tiled = list()
             for b in bias:
                 c = p_hilbert_index(p=p-1,morton=morton)
@@ -61,25 +60,19 @@ def hilbert_index(lx: int, ly: int, morton=False):
                 c += np.tile(b,(n_row,1))
                 tiled.append(c)
             tiled = np.array(tiled)
-            print(f'[{p}]{tiled=}')
             for i, t in enumerate(tiled):
                 if morton == False:
                     if i == 0:
-                        print(f'[{i}]{t=}')
                         t[:,0], t[:,1] = t[:,1].copy(), t[:,0].copy()
-                        print(f'[{i}]{t=}')
                     elif i == 3:
-                        print(f'[{i}]{t=}')
                         t -= [[2**(p-1),2**(p-1)-1]]
                         t[:,0], t[:,1] = -t[:,1].copy(), -t[:,0].copy()
                         t += [[2**(p-1),2**(p-1)-1]]
-                        print(f'[{i}]{t=}')
                 if i == 0:
                     coord = np.array([t])
                 else:
                     coord = np.r_[coord,[t]]
             coord = coord.reshape(-1,2)
-            print(f'[{p}]{coord=}')
             return coord
     coord = p_hilbert_index(p=p,morton=morton)
     if axis == 1:
