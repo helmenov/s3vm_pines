@@ -13,22 +13,74 @@ recategorize17to10_csv = (
 )
 
 
-def xy2idx(x_coord, y_coord, Lx, Ly):
-    """_summary_
+def xy2idx(x_coord: int, y_coord: int, Lx: int, Ly: int) -> int:
+    """Given (x,y) and (Lx,Ly), then return image pixel index
 
     Args:
         x_coord, y_coord: int. x-axises and y-axises. [[0,0]] means Left-Upper side coordinate.
+        Lx and Ly: int. image width and height in pixel
+    Return:
+        index: image pixel index (y_coord * Lx + x_coord)
     """
+    assert Lx * Ly > 0
+    assert x_coord < Lx
+    assert y_coord < Ly
 
-    # idx = np.where([(_pines.coordinates[:,0] == x_coord) & (_pines.coordinates[:,1] == y_coord)])[0][0]
-    idx = y_coord * Lx + x_coord
+    idx = int(y_coord * Lx + x_coord)
 
     return idx
 
 
-def zigzag_index(lx, ly):
-    """zigzag indexesを返す"""
-    zigzag_index = list()
+def hilbert_index(lx: int, ly: int, morton: bool=False):
+    """
+    generate Hilbert scan ordered indices
+
+    Args:
+        lx and ly: (int) image width and height in pixel
+        morton: (bool) morton indices
+    Return:
+        indices: NDArray (2^p*2^p, 1). Hilbert indices
+    """
+    p = int(np.ceil(np.log2(np.max([lx,ly]))))
+
+    def p_hilbert_index(p, morton):
+        if p == 1:
+            if morton == False:
+                coord = [[1,0],[0,0],[0,1],[1,1]]
+            else:
+                coord = [[1,0],[0,0],[1,1],[0,1]]
+            return np.array(coord, dtype=int)
+        else:
+            bias = 2**(p-1) * p_hilbert_index(p=p-1, morton=morton)
+            for i, b in enumerate(bias):
+                c = p_hilbert_index(p=p-1,morton=morton) + np.tile(b,(2**p,1))
+                if morton == False:
+                    if i == 0:
+                        c[1], c[3] = c[3],c[1]
+                    elif i == 2:
+                        c[0], c[2] = c[2],c[0]
+                if i==0:
+                    coord = c
+                else:
+                    coord = np.r_[coord,c]
+            return coord
+    coord = p_hilbert_index(p=p,morton=morton)
+    hilbert_indices: list[int] = list()
+    for r,c in coord:
+        if r<ly and c<lx:
+            hilbert_indices.append(int(r*lx+c))
+    return np.array(hilbert_indices, dtype=int)
+
+def zigzag_index(lx: int, ly: int) :
+    """Given (lx,ly), then return zigzag indices which length is lx*ly
+
+    Args:
+        lx and ly: int. image width and height in pixel
+    Return:
+        indices: NDArray (lx*ly,1). zigzag indices.
+    """
+    assert lx * ly > 0
+    zigzag_indices: list[int] = list()
     for ix in range(lx + ly - 1):
         if ix < lx:
             nix = ix
@@ -37,19 +89,27 @@ def zigzag_index(lx, ly):
             nix = lx - 1
             niy = ix - lx + 1
         # print(f'({nix},{niy})={niy*lx+nix}')
-        zigzag_index.append(niy * lx + nix)
+        zigzag_indices.append(niy * lx + nix)
         while 0 <= nix - 1 and niy + 1 < ly:
             nix = nix - 1
             niy = niy + 1
-            zigzag_index.append(niy * lx + nix)
+            zigzag_indices.append(niy * lx + nix)
             # print(f'({nix},{niy})={niy*lx+nix}')
-    zigzag_index = np.array(zigzag_index, dtype=int)
-    return zigzag_index
+    np_zigzag_indices = np.array(zigzag_indices, dtype=int)
+    return np_zigzag_indices
 
 
-def zigzag_sortindices(indices, zigzag_index):
+def scanner_sortindices(indices, scanner_indices):
+    """sort pixel indices to zigzag_indices order
+
+    Args:
+        indices: image pixel indices
+        scanner_indices: returned output of func:zigzag_index or hilbert_index
+    Return:
+        out_indices: sorted indices
+    """
     out_indices = list()
-    for idx in zigzag_index:
+    for idx in scanner_indices:
         for idx2 in indices:
             if idx == idx2:
                 out_indices.append(idx2)
@@ -58,22 +118,29 @@ def zigzag_sortindices(indices, zigzag_index):
     out_indices = np.array(out_indices, dtype=int)
     return out_indices
 
-
 def train_test_split(
-    p_train=0.5,
+    p_train=1,
     recategorize_rule=recategorize17to10_csv,
     gt_gic=True,
     seed_train=0,
+    n_train_equal=True
 ):
     """split whole data to 'train' and 'test'
     すべての座標上のデータをカテゴリごとに領域分割し，
     広い領域から連続的に，trainを半分先取り，残りをtestとする
 
+    Args:
+        p_train: 0<=p_train<=1. proportion to training instance in each class. default is 1 (all labeled is trained)
+        recategorize_rule: default is recategorize17to10.csv
+        gt_gic: default is True
+        seed_train: default is 0
+        n_train_equal: (bool) if True, all classes has same number of instances (= N*p_train/n_class, for whole labeled number is N).
+                              if False, (= n*p_train, for each class labeled number is n). default is True.
+
     Returns:
         train_test_status: status labels NDArray
         train_test_status_name: ["background","test","training"]
     """
-
     if seed_train > 0:
         rg_train = default_rng(seed_train)
 
@@ -92,7 +159,7 @@ def train_test_split(
     ####
     print(f"Now clustering for each target category")
     ####
-    zigzag = zigzag_index(Lx, Ly)
+    scanner = hilbert_index(Lx, Ly, morton=True)
     for t in range(1, n_class):
         ####
         print(f"\t{t}/{n_class}: {_pines.target_names[t]}", end="")
@@ -180,7 +247,7 @@ def train_test_split(
                 for idx in range(len(labeled_cluster))
                 if labeled_cluster[idx] == cluster_size_idx[c] + 1
             ]
-            list_idx = zigzag_sortindices(list_idx, zigzag)
+            list_idx = scanner_sortindices(list_idx, scanner)
             if len(list_idx) > 0:
                 cluster_list_t.append(list_idx)
         # print(len(cluster[cluster == c]))
@@ -201,6 +268,7 @@ def train_test_split(
     logging.info("Now sampling train and test data")
     ####
     # print(zigzag)
+    n_train = _pines.target[_pines.target>0].shape[0]
     train_test_status = np.zeros_like(_pines.target)  # 'background'
     for t in range(1, n_class):
         logging.info(f"\t{t}/{n_class}:{_pines.target_names[t]}")
@@ -208,7 +276,12 @@ def train_test_split(
         train_test_status[idx] = 1  # 'test'
         n_gt_t = _pines.target[idx].shape[0]
         # print(n_labeled)
-        n_train_t = int(p_train * n_gt_t)
+        if n_train_equal == False:
+            n_train_t = int(np.ceil(p_train * n_gt_t))
+        else:
+            n_train_t = int(np.ceil(n_train*p_train/n_class))
+        if n_train_t > n_gt_t:
+            n_train_t = n_gt_t
         n_test_t = n_gt_t - n_train_t
 
         # cluster_listのサイズ降順ソート
@@ -230,13 +303,6 @@ def train_test_split(
             for l in range(len(cluster_list[t - 1]))
             for i in range(len(cluster_list[t - 1][l]))
         ]
-        # print(idx)
-        # print(len(idx))
-
-        # zig-zag sort idx
-        # idx = zigzag_sortindices(idx, zigzag)
-        # print(idx)
-        # print(len(idx))
 
         # st = 抽出の取り始めindex
         if seed_train > 0:
@@ -253,14 +319,14 @@ def train_test_split(
 
 
 def labeled_unlabeled_sample(
-    p_labeled,
-    p_unlabeled,
+    p_labeled:float,
+    p_unlabeled:float,
     train_test_status,
     recategorize_rule=recategorize17to10_csv,
-    gt_gic=True,
-    unlabeled_neighbor_labeled=False,
-    seed_labeled=0,
-    seed_unlabeled=0,
+    gt_gic:bool=True,
+    unlabeled_neighbor_labeled:bool=False,
+    seed_labeled:int=0,
+    seed_unlabeled:int=0,
 ):
     """sample labeled and unlabeled data from train data in the each proportion.
 
@@ -273,6 +339,10 @@ def labeled_unlabeled_sample(
         unlabeled_neighbor_labeled (bool): Trueの場合，ラベルなしデータを，空間上でラベル付きデータに隣りあっているデータ群から採集. Falseの場合にはランダムに採集．Defaults to False.
         seed_labeled (int, optional): seed for random heading of sampling labeled. Defaults to None.
         seed_unlabeled (int, optional): seed for random sampling unlabeled. Defaults to None.
+
+    Return:
+        status: status labels NDArray
+        status_names: ["background", "test", "training_rest", "labeled", "unlabeled"]
     """
     n_whole = train_test_status.shape[0]
     n_train = train_test_status[train_test_status == 2].shape[0]
