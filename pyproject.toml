@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "s3vm-pines"
-version = "0.1.17"
+version = "0.1.18"
 description = "A study on Multiclass S3VM for IndianPines"
 authors = ["Kotaro SONODA <kotaro1976@gmail.com>"]
 maintainers = ["Kotaro SONODA <kotaro1976@gmail.com>"]

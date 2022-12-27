@@ -374,7 +374,7 @@ def labeled_unlabeled_sample(
     ####
     logging.info(f"Now clustering for each target category")
     ####
-    zigzag = zigzag_index(Lx, Ly)
+    scanner = hilbert_index(Lx, Ly, morton=True)
     for t in range(1, n_class):
         ####
         logging.info(f"\t{t}/{n_class}: {_pines.target_names[t]}")
@@ -468,7 +468,7 @@ def labeled_unlabeled_sample(
                 for idx in range(len(labeled_cluster))
                 if labeled_cluster[idx] == cluster_size_idx[c] + 1
             ]
-            list_idx = zigzag_sortindices(list_idx, zigzag)
+            list_idx = scanner_sortindices(list_idx, scanner)
             if len(list_idx) > 0:
                 cluster_list_t.append(list_idx)
             # print(len(cluster[cluster == c]))
@@ -512,7 +512,7 @@ def labeled_unlabeled_sample(
         ]
         # print(idx)
         # print(len(idx))
-        # idx = zigzag_sortindices(idx, zigzag)
+        # idx = scanner_sortindices(idx, scanner)
 
         if seed_labeled > 0:
             st = int(
