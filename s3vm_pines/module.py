@@ -51,9 +51,9 @@ def hilbert_index(lx: int, ly: int, morton: bool=False):
                 coord = [[1,0],[0,0],[1,1],[0,1]]
             return np.array(coord, dtype=int)
         else:
-            bias = 2**(p-1) * p_hilbert_index(p=p-1, morton=morton)
+            bias = 2 * p_hilbert_index(p=p-1, morton=morton)
             for i, b in enumerate(bias):
-                c = p_hilbert_index(p=p-1,morton=morton) + np.tile(b,(2**p,1))
+                c = p_hilbert_index(p=p-1,morton=morton) + np.tile(b,(4,1))
                 if morton == False:
                     if i == 0:
                         c[1], c[3] = c[3],c[1]
