@@ -292,8 +292,12 @@ def train_test_split(
             n_train_t = int(np.ceil(p_train * n_gt_t))
         else:
             n_train_t = int(np.ceil(n_train*p_train/n_class))
+
         if n_train_t > n_gt_t:
-            n_train_t = n_gt_t
+            n_train_t = int(n_gt_t/2)
+            p_train_ = n_train_t * n_class/n_train
+            raise ValueError(f"p_train must be less than {p_train_}. {p_train=} is too large!")
+
         n_test_t = n_gt_t - n_train_t
 
         # cluster_listのサイズ降順ソート
