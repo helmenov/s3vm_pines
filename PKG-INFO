@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3vm-pines
-Version: 0.1.22
+Version: 0.1.23
 Summary: A study on Multiclass S3VM for IndianPines
 Home-page: https://github.com/helmenov/s3vm_pines
 License: MIT
@@ -9,10 +9,10 @@ Author: Kotaro SONODA
 Author-email: kotaro1976@gmail.com
 Maintainer: Kotaro SONODA
 Maintainer-email: kotaro1976@gmail.com
-Requires-Python: >=3.10,<3.11
+Requires-Python: >=3.11,<4.0
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
 Requires-Dist: SciencePlots (>=1.0.9,<2.0.0)
 Requires-Dist: indianpines @ git+https://github.com/helmenov/indianpines.git
 Requires-Dist: matplotlib (>=3.6.2,<4.0.0)
